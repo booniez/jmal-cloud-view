@@ -219,6 +219,7 @@ export default {
       that.dragover = false
     }, false);
 
+
     Bus.$on('fileListScrollTop', fileListScrollTop => {
       this.fileListScrollTop = fileListScrollTop
     })
@@ -249,6 +250,19 @@ export default {
     this.$nextTick(() => {
       window.uploader = this.$refs.uploader.uploader
     })
+    document.body.getElementsByClassName('uploader')[0].addEventListener("drop", e => {
+    //uploader为拖拽放置的位置
+    let items = e.dataTransfer.items;//  `items`属性是 拖动操作list中的数据传输项的一个.该列表为操作中的每个项目包含一个项目，如果该操作没有项目，则列表为空。
+      let files = e.dataTransfer.files;  //对象的**`files`**属性是在拖动操作中。如果操作不包含文件，则列表为空
+      for (let i = 0; i < items.length; i++) {
+        let item = items[i];
+        if (item.kind === "file" && item.type == '' && !files[i].relativePath) {
+          let entry = item.webkitGetAsEntry();
+          this.recursionFile(entry) //定义的递归方法
+        }
+      }
+      e.preventDefault();
+    });
 
   },
   destroyed() {
@@ -257,6 +271,66 @@ export default {
     Bus.$off('uploadFileListBack')
   },
   methods: {
+    recursionFile(file) {
+  let aaa = file.createReader(); //createReader()  返回一个FileSystemDirectoryReader对象
+  if (file.isDirectory && aaa.readEntries.length === 1) {
+    api.uploadFolder({
+              isFolder: file.isDirectory,
+              folderPath: encodeURI(file.fullPath.substring(0, file.fullPath.lastIndexOf(file.name))),
+              filename: encodeURI(file.name),
+              folder: this.$route.query.folder,
+              currentDirectory: encodeURI(this.params.currentDirectory),
+              username: this.params.username,
+              userId: this.params.userId
+            }).then(() => {
+              this.getFileList()
+            }).catch(e => {
+            })  
+  }
+  aaa.readEntries((j) => {  //readEntries()方法检索正在读取的目录中的目录条目，并将它们以数组的形式传递给提供的回调函数
+    j.forEach(fileItem => {
+      if (!fileItem.isFile) { //如果遍历的对象不是文件，则继续执行createReader()方法
+        if (j.length === 1) {
+      //     if (fileItem.fullPath.replace(fileItem.name, '') === "//elasticsearch/data") {
+      // debugger
+    // }
+          api.uploadFolder({
+              isFolder: fileItem.isDirectory,
+              folderPath: encodeURI(fileItem.fullPath.substring(0, fileItem.fullPath.lastIndexOf(fileItem.name))),
+              filename: encodeURI(fileItem.name),
+              folder: this.$route.query.folder,
+              currentDirectory: encodeURI(this.params.currentDirectory),
+              username: this.params.username,
+              userId: this.params.userId
+            }).then(() => {
+              this.getFileList()
+            }).catch(e => {
+            })  
+        }
+        let folderContents = fileItem.createReader();
+        folderContents.readEntries((i) => {
+          if (i.length == 0) { //如果文件的目录为0，则表示此为空的文件夹，执行相应的上传操作，其实就发送一个空文件夹的目录            
+            api.uploadFolder({
+              isFolder: fileItem.isDirectory,
+              folderPath: encodeURI(fileItem.fullPath.substring(0, fileItem.fullPath.lastIndexOf(fileItem.name))),
+              filename: encodeURI(fileItem.name),
+              folder: this.$route.query.folder,
+              currentDirectory: encodeURI(this.params.currentDirectory),
+              username: this.params.username,
+              userId: this.params.userId
+            }).then(() => {
+              this.getFileList()
+            }).catch(e => {
+            })                        
+          } else {
+            this.recursionFile(fileItem) //如果目录不为空，则继续递归
+          }
+        })
+      }
+    })
+  })
+},
+
     onDragenter(e) {
       this.params = {
         currentDirectory: this.$route.query.path || '/',
